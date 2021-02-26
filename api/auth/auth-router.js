@@ -1,7 +1,33 @@
 const router = require('express').Router();
+const bcryptjs = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const Users = require("./auth-model");
+const {isValid} = require("./is-valid");
+const {jwtSecret} = require("../middleware/secret");
+const { json } = require('express');
+
 
 router.post('/register', (req, res) => {
-  res.end('implement register, please!');
+  const newUser = req.body
+
+  if (isValid(newUser)) {
+    const rounds = process.env.BCRYPT_ROUNDS || 8
+    const hash = bcryptjs.hashSync(newUser.password, rounds);
+    newUser.password = hash
+    Users.add(newUser)
+    .then((user)=>{
+      res.status(201).json({data:user});
+    })
+    .catch((err)=>{
+      res.status(500).json("username taken")
+    });
+  } else {
+    res.status(400).json(
+      "username and password required."
+    );
+  
+}
+
   /*
     IMPLEMENT
     You are welcome to build additional middlewares to help with the endpoint's functionality.
@@ -29,7 +55,24 @@ router.post('/register', (req, res) => {
 });
 
 router.post('/login', (req, res) => {
-  res.end('implement login, please!');
+  const {username, password}= req.body;
+  if (isValid(req.body)){
+    Users.findBy({username:username})
+    .then(([user])=>{
+      if(user && bcryptjs.compareSync(password, user.password)){
+        const token = makeToken(user)
+        res.status(200).json({
+          message: "welcome, Captain Marvel",token
+        })
+      }else{
+        res.status(401).json(
+          "invalid credentials"
+        )
+      }; 
+    });
+  } else {
+    res.status(400).json("username and password required")
+  }
   /*
     IMPLEMENT
     You are welcome to build additional middlewares to help with the endpoint's functionality.
@@ -54,5 +97,14 @@ router.post('/login', (req, res) => {
       the response body should include a string exactly as follows: "invalid credentials".
   */
 });
-
+function makeToken(user){
+  const payload = {
+    subject:user.id,
+    username:user.username
+  }
+  const options = {
+    expiresIn:"600s"
+  }
+  return jwt.sign(payload,jwtSecret,options)
+}
 module.exports = router;
